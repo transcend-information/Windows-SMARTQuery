@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29905.134
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SMARTQuery", "APISample\SMARTQuery.csproj", "{7CC4380D-23E9-48D8-AB2F-EEE69EDE2CE2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7CC4380D-23E9-48D8-AB2F-EEE69EDE2CE2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7CC4380D-23E9-48D8-AB2F-EEE69EDE2CE2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7CC4380D-23E9-48D8-AB2F-EEE69EDE2CE2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7CC4380D-23E9-48D8-AB2F-EEE69EDE2CE2}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {73D9C508-BFCB-465A-BDF6-7E1BD4027788}
+	EndGlobalSection
+EndGlobal
