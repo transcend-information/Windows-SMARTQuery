@@ -26,6 +26,9 @@ Usage
 2.The combobox will show all the storage device which match selected interface
 ![ComboboxList](https://github.com/transcend-information/Windows-SMARTQuery/blob/master/ComboboxList.png)
 
+![ComboboxList](https://github.com/transcend-information/Windows-SMARTQuery/blob/master/ComboboxList_RAID.png)
+(Also support RAID0/RAID1 devices)
+
 3.Select the storage device you want to get information
 ![SelectDevice](https://github.com/transcend-information/Windows-SMARTQuery/blob/master/SelectDevice.png)
 

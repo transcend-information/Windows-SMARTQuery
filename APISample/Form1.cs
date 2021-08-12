@@ -199,7 +199,16 @@ namespace SMARTQuery
         public static extern bool CloseHandle(IntPtr hObject);
 
 
+        public struct SIbuffer
+        {
+            public byte[] id;
+            public byte[] smart;
+        }
+
+
         Dictionary<string, string> driveMapping = new Dictionary<string, string>();
+        Dictionary<string, RAIDClass.RaidInfo> raidDict = new Dictionary<string, RAIDClass.RaidInfo>();
+        Dictionary<string, SIbuffer> siBufDict = new Dictionary<string, SIbuffer>();
         bool isUSB = false;
         bool isNVMe = false;
         bool isWindows10 = false;
@@ -216,77 +225,194 @@ namespace SMARTQuery
         #region Change interface to ATA
         private void radioButton_ATA_CheckedChanged(object sender, EventArgs e)
         {
+            if (!radioButton_ATA.Checked)
+                return;
             volumeComboBox.Text = "";
             dataGridView1.Rows.Clear();
             dataGridView2.Rows.Clear();
 
             ManagementObjectSearcher searcher = new ManagementObjectSearcher("root\\CIMV2", "SELECT * FROM Win32_DiskDrive");
             volumeComboBox.Items.Clear();
+            siBufDict.Clear();
             driveMapping.Clear();
+            raidDict.Clear();
             foreach (ManagementObject wmi_HD in searcher.Get())
             {
                 if (wmi_HD["Size"] != null)
                 {
                     if (wmi_HD["InterfaceType"].ToString() != "USB" && (!isWindows10 || !wmi_HD["Caption"].ToString().Contains("SCSI")) && !wmi_HD["PNPDeviceID"].ToString().ToUpper().Contains("NVME"))
                     {
-                        string info = wmi_HD["Name"].ToString() + " " + wmi_HD["Caption"].ToString();
-                        volumeComboBox.Items.Add(info);
-                        driveMapping.Add(info, wmi_HD["PNPDeviceID"].ToString());
+                        if (!wmi_HD["Caption"].ToString().ToUpper().Contains("RAID"))
+                        {
+                            string info = wmi_HD["Name"].ToString() + " " + wmi_HD["Caption"].ToString();
+                            volumeComboBox.Items.Add(info);
+                            driveMapping.Add(info, wmi_HD["PNPDeviceID"].ToString());
+                        }
                     }
                 }
             }
             isUSB = false;
             isNVMe = false;
+            
+
+            List<string> sataSNList = new List<string>();    // pre make SATA serial number list to filter duplicate item in SATA RAID list
+            byte[] idBuf = new byte[512];
+            byte[] smartBuf = new byte[512];
+
+            foreach (var fullPath in volumeComboBox.Items)
+            {
+                getDriveIDandSmartTable(fullPath.ToString(), ref idBuf, ref smartBuf);
+                SIbuffer si = new SIbuffer();
+                si.id = idBuf;
+                si.smart = smartBuf;
+                siBufDict.Add(fullPath.ToString(), si);
+                sataSNList.Add(getSN(idBuf));
+            }
+
+
+            //Get SATA RAID devices info
+            RAIDClass raid = new RAIDClass();
+            List<RAIDClass.RaidInfo> sataRaidInfoList = new List<RAIDClass.RaidInfo>();
+
+            sataRaidInfoList = raid.GetRaidDeviceList_SATA();
+            int cnt = 1;
+            foreach (var item in sataRaidInfoList)
+            {
+                bool duplicate = false;
+                foreach (var sataSN in sataSNList)
+                {
+                    if (sataSN == getSN(item.id))
+                    {
+                        duplicate = true;
+                    }
+                }
+                if (!duplicate)
+                {
+                    string fullPath = "RAID_Device[" + cnt + "] " + UtilityClass.getModelName(item.id, false);
+                    volumeComboBox.Items.Add(fullPath);
+                    raidDict.Add(fullPath, item);
+                    cnt++;
+                }
+            }
         }
         #endregion
 
         #region Change interface to USB
         private void radioButton_USB_CheckedChanged(object sender, EventArgs e)
         {
+            if (!radioButton_USB.Checked)
+                return;
             volumeComboBox.Text = "";
             dataGridView1.Rows.Clear();
             dataGridView2.Rows.Clear();
             ManagementObjectSearcher searcher = new ManagementObjectSearcher("root\\CIMV2", "SELECT * FROM Win32_DiskDrive");
             volumeComboBox.Items.Clear();
+            siBufDict.Clear();
             foreach (ManagementObject wmi_HD in searcher.Get())
             {
                 if (wmi_HD["Size"] != null)
                 {
                     if (wmi_HD["InterfaceType"].ToString() == "USB" || (isWindows10 && wmi_HD["Caption"].ToString().Contains("SCSI")) && !wmi_HD["PNPDeviceID"].ToString().ToUpper().Contains("NVME"))
                     {
-                        string info = wmi_HD["Name"].ToString() + " " + wmi_HD["Caption"].ToString();
-                        volumeComboBox.Items.Add(info);
+                        if (!wmi_HD["Caption"].ToString().ToUpper().Contains("RAID"))
+                        {
+                            string info = wmi_HD["Name"].ToString() + " " + wmi_HD["Caption"].ToString();
+                            volumeComboBox.Items.Add(info);
+                        }
                     }
                 }
             }
             isUSB = true;
             isNVMe = false;
+            
+            byte[] idBuf = new byte[512];
+            byte[] smartBuf = new byte[512];
+
+            foreach (var fullPath in volumeComboBox.Items)
+            {
+                getDriveIDandSmartTable(fullPath.ToString(), ref idBuf, ref smartBuf);
+                SIbuffer si = new SIbuffer();
+                si.id = idBuf;
+                si.smart = smartBuf;
+                siBufDict.Add(fullPath.ToString(), si);
+            }
         }
         #endregion
 
         #region Change interface to NVMe
         private void radioButton_NVMe_CheckedChanged(object sender, EventArgs e)
         {
+            if (!radioButton_NVMe.Checked)
+                return;
             volumeComboBox.Text = "";
             dataGridView1.Rows.Clear();
             dataGridView2.Rows.Clear();
             ManagementObjectSearcher searcher = new ManagementObjectSearcher("root\\CIMV2", "SELECT * FROM Win32_DiskDrive");
             volumeComboBox.Items.Clear();
+            siBufDict.Clear();
             driveMapping.Clear();
+            raidDict.Clear();
             foreach (ManagementObject wmi_HD in searcher.Get())
             {
                 if (wmi_HD["Size"] != null)
                 {
                     if (wmi_HD["InterfaceType"].ToString() != "USB" && /*(!isWindows10()||wmi_HD["InterfaceType"].ToString() != "SCSI") &&*/ wmi_HD["PNPDeviceID"].ToString().ToUpper().Contains("NVME"))
                     {
-                        string info = wmi_HD["Name"].ToString() + " " + wmi_HD["Caption"].ToString();
-                        volumeComboBox.Items.Add(info);
-                        driveMapping.Add(info, wmi_HD["PNPDeviceID"].ToString());
+                        if (!wmi_HD["Caption"].ToString().ToUpper().Contains("RAID"))
+                        {
+                            string info = wmi_HD["Name"].ToString() + " " + wmi_HD["Caption"].ToString();
+                            volumeComboBox.Items.Add(info);
+                        }
                     }
                 }
             }
             isUSB = false;
             isNVMe = true;
+
+      
+            List<string> nvmeSNList = new List<string>();    // pre make NVMe serial number list to filter duplicate item in NVMe RAID list
+            byte[] idBuf = new byte[4096];
+            byte[] smartBuf = new byte[512];
+
+            foreach (var fullPath in volumeComboBox.Items)
+            {
+                getDriveIDandSmartTable(fullPath.ToString(), ref idBuf, ref smartBuf);
+                SIbuffer si = new SIbuffer();
+                si.id = idBuf;
+                si.smart = smartBuf;
+                siBufDict.Add(fullPath.ToString(), si);
+                nvmeSNList.Add(getSN_NVMe(idBuf));
+            }
+            
+
+            //Get NVMe RAID devices info
+            RAIDClass raid = new RAIDClass();
+            List<RAIDClass.RaidInfo> nvmeRaidInfoList = new List<RAIDClass.RaidInfo>();
+
+            nvmeRaidInfoList = raid.GetRaidDeviceList_NVMe();
+            int cnt = 1;
+            foreach (var item in nvmeRaidInfoList)
+            {
+                if (item.nvmeDiskSize != 0)
+                {
+                    bool duplicate = false;
+                    foreach (var nvmeSN in nvmeSNList)
+                    {
+                        if (nvmeSN == getSN_NVMe(item.id))
+                        {
+                            duplicate = true;
+                        }
+                    }
+                    if (!duplicate)
+                    {
+                        string fullPath = "RAID_Device[" + cnt + "] " + UtilityClass.getModelName(item.id, true);
+                        volumeComboBox.Items.Add(fullPath);
+                        raidDict.Add(fullPath, item);
+                        cnt++;
+                    }
+                }
+            }
+
         }
         #endregion
 
@@ -295,9 +421,25 @@ namespace SMARTQuery
         {
             this.Cursor = Cursors.WaitCursor;
 
+            driveInfo = new byte[1];
+            SMARTInfo = new byte[1];
+
             if (volumeComboBox.Text != null && volumeComboBox.Text != "")
             {
-                getDriveIDandSmartTable(volumeComboBox.Text, ref driveInfo, ref SMARTInfo);
+                if (volumeComboBox.Text.ToUpper().Contains("RAID"))  //RAID device
+                {
+                    RAIDClass.RaidInfo raidInfo = new RAIDClass.RaidInfo();
+                    raidDict.TryGetValue(volumeComboBox.Text, out raidInfo);
+                    driveInfo = raidInfo.id;
+                    SMARTInfo = raidInfo.smart;
+                }
+                else
+                {
+                    SIbuffer si = new SIbuffer();
+                    siBufDict.TryGetValue(volumeComboBox.Text, out si);
+                    driveInfo = si.id;
+                    SMARTInfo = si.smart;
+                }
 
                 List<string[]> rowCollection = new List<string[]>();
                 if (!isNVMe)
@@ -333,7 +475,7 @@ namespace SMARTQuery
         {
             ManagementObjectSearcher searcher = new ManagementObjectSearcher("root\\CIMV2", "SELECT * FROM Win32_DiskDrive");
             volumeComboBox.Items.Clear();
-
+            siBufDict.Clear();
             isWindows10 = checkWindows10();
 
             foreach (ManagementObject wmi_HD in searcher.Get())
@@ -342,12 +484,57 @@ namespace SMARTQuery
                 {
                     if (wmi_HD["InterfaceType"].ToString() != "USB" && (!isWindows10 || !wmi_HD["Caption"].ToString().Contains("SCSI")) && !wmi_HD["PNPDeviceID"].ToString().ToUpper().Contains("NVME"))
                     {
-                        string info = wmi_HD["Name"].ToString() + " " + wmi_HD["Caption"].ToString();
-                        volumeComboBox.Items.Add(info);
-                        driveMapping.Add(info, wmi_HD["PNPDeviceID"].ToString());
+                        if (!wmi_HD["Caption"].ToString().ToUpper().Contains("RAID"))
+                        {
+                            string info = wmi_HD["Name"].ToString() + " " + wmi_HD["Caption"].ToString();
+                            volumeComboBox.Items.Add(info);
+                            driveMapping.Add(info, wmi_HD["PNPDeviceID"].ToString());
+                        }
                     }
                 }
             }
+
+
+            List<string> sataSNList = new List<string>();    // pre make SATA serial number list to filter duplicate item in SATA RAID list
+            byte[] idBuf = new byte[512];
+            byte[] smartBuf = new byte[512];
+
+            foreach (var fullPath in volumeComboBox.Items)
+            {
+                getDriveIDandSmartTable(fullPath.ToString(), ref idBuf, ref smartBuf);
+                SIbuffer si = new SIbuffer();
+                si.id = idBuf;
+                si.smart = smartBuf;
+                siBufDict.Add(fullPath.ToString(), si);
+                sataSNList.Add(getSN(idBuf));
+            }
+
+
+            //Get SATA RAID devices info
+            RAIDClass raid = new RAIDClass();
+            List<RAIDClass.RaidInfo> sataRaidInfoList = new List<RAIDClass.RaidInfo>();
+
+            sataRaidInfoList = raid.GetRaidDeviceList_SATA();
+            int cnt = 1;
+            foreach(var item in sataRaidInfoList) 
+            {
+                bool duplicate = false;
+                foreach (var sataSN in sataSNList) {
+                    if (sataSN == getSN(item.id))
+                    {
+                        duplicate = true;
+                    }
+                }
+                if (!duplicate)
+                {
+                    string fullPath = "RAID_Device[" + cnt + "] " + UtilityClass.getModelName(item.id, false);
+                    volumeComboBox.Items.Add(fullPath);
+                    raidDict.Add(fullPath, item);
+                    cnt++;
+                }
+            }
+
+
         }
 
         #region Get ID/Smart Data Array
@@ -644,6 +831,30 @@ namespace SMARTQuery
         }
         #endregion
 
+
+        private string getSN(byte[] driveinfo)
+        {
+            string sn = "";  //Word 10~19
+            for (int i = 0; i < 10; i++)
+            {
+                sn += Encoding.Default.GetString(driveinfo, (10 * 2) + (i * 2 + 1), 1) + Encoding.Default.GetString(driveinfo, (10 * 2) + (i * 2), 1);
+            }
+            return sn.Trim();
+        }
+        private string getSN_NVMe(byte[] driveinfo)
+        {
+            string sn = "";
+            ASCIIEncoding ascii = new ASCIIEncoding();
+            for (int i = 4; i <= 23; i++)
+            {
+                if (!driveinfo[i].Equals(0))
+                    sn += ascii.GetString(driveinfo, i, 1);
+                else
+                    break;
+            }
+            return sn.Trim();
+        }
+
         #region Show ID Info
         private void showDriveInfo(byte[] driveinfo)
         {
@@ -815,6 +1026,7 @@ namespace SMARTQuery
 
         private void showDriveInfo_NVMe(byte[] driveinfo)
         {
+            dataGridView1.Rows.Clear();
             dataGridView1.Rows.Add(new string[] { "PCI Vendor ID", getTableData_NVMe(driveinfo, 0, 1, false) });
             dataGridView1.Rows.Add(new string[] { "PCI Subsystem Vendor ID", getTableData_NVMe(driveinfo, 2, 3, false) });
 
