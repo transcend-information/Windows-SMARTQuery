@@ -421,8 +421,11 @@ namespace SMARTQuery
         {
             this.Cursor = Cursors.WaitCursor;
 
-            driveInfo = new byte[1];
-            SMARTInfo = new byte[1];
+            driveInfo = new byte[4096];
+            SMARTInfo = new byte[512];
+
+            int nvme_raidType = -1;
+            int nvme_raidStatus = -1;
 
             if (volumeComboBox.Text != null && volumeComboBox.Text != "")
             {
@@ -432,6 +435,11 @@ namespace SMARTQuery
                     raidDict.TryGetValue(volumeComboBox.Text, out raidInfo);
                     driveInfo = raidInfo.id;
                     SMARTInfo = raidInfo.smart;
+                    if (isNVMe)
+                    {
+                        nvme_raidType = raidInfo.raidType;
+                        nvme_raidStatus = raidInfo.raidStatus;
+                    }
                 }
                 else
                 {
@@ -449,8 +457,16 @@ namespace SMARTQuery
                 }
                 else
                 {
-                    showDriveInfo_NVMe(driveInfo);
-                    parseSmartInformation_NVMe(SMARTInfo, ref rowCollection);
+                    if (volumeComboBox.Text.ToUpper().Contains("RAID"))
+                    {
+                        showDriveInfo_NVMe(driveInfo, nvme_raidType, nvme_raidStatus);
+                        parseSmartInformation_NVMe(SMARTInfo, ref rowCollection);
+                    }
+                    else
+                    {
+                        showDriveInfo_NVMe(driveInfo);
+                        parseSmartInformation_NVMe(SMARTInfo, ref rowCollection);
+                    }
                 }
 
                 showSmartInfo(rowCollection);
@@ -1024,9 +1040,44 @@ namespace SMARTQuery
         }
 
 
-        private void showDriveInfo_NVMe(byte[] driveinfo)
+        private void showDriveInfo_NVMe(byte[] driveinfo, int raidType = -1, int raidStatus = -1)
         {
             dataGridView1.Rows.Clear();
+
+            if (raidType != -1 || raidStatus != -1)
+            {
+                string nvmeRaidMode = "";
+                if (raidStatus == 0)
+                {
+                    if (raidType == 1)
+                    {
+                        nvmeRaidMode = "RAID 0";
+                    }
+                    else if (raidType == 2)
+                    {
+                        nvmeRaidMode = "RAID 1";
+                    }
+                    else
+                    {
+                        nvmeRaidMode = "RAID";
+                    }
+                }
+                else if (raidStatus == 1)
+                {
+                    nvmeRaidMode = "Degraded";
+                }
+                else if (raidStatus == 2)
+                {
+                    nvmeRaidMode = "Rebuild";
+                }
+                else
+                {
+                    nvmeRaidMode = "Fail";
+                }
+
+                dataGridView1.Rows.Add(new string[] { "RAID Mode", nvmeRaidMode });
+            }
+
             dataGridView1.Rows.Add(new string[] { "PCI Vendor ID", getTableData_NVMe(driveinfo, 0, 1, false) });
             dataGridView1.Rows.Add(new string[] { "PCI Subsystem Vendor ID", getTableData_NVMe(driveinfo, 2, 3, false) });
 
