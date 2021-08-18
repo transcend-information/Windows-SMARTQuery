@@ -22,7 +22,7 @@ namespace SMARTQuery
         [DllImport(@"Dlls\SSD_Raid32.dll", EntryPoint = "getNVMEIdSmart", CallingConvention = CallingConvention.Cdecl)]
         public static extern bool getNVMEIdSmart32(int scsiPort, int scsiTargetId, IntPtr id, IntPtr smart, ref ulong disksize);
 
-        public static bool getNvmePhyNPort(int scsiPort, IntPtr Phy, ref int raidType, ref int raidStatus)
+        public static bool getNvmePhyPort(int scsiPort, IntPtr Phy, ref int raidType, ref int raidStatus)
         {
             return IntPtr.Size == 8 /* 64bit */ ? getPhyPortNVME64(scsiPort, Phy, ref raidType, ref raidStatus) : getPhyPortNVME32(scsiPort, Phy, ref raidType, ref raidStatus);
         }
@@ -114,18 +114,17 @@ namespace SMARTQuery
             byte[] smart_buf = new byte[512];
             //scan SATA raid device
             const int MAX_SEARCH_SCSI_PORT = 16;
-
-            for (int index = 0; index < MAX_SEARCH_SCSI_PORT; index++)
+            
+            for (int index = 0; index < MAX_SEARCH_SCSI_PORT; index++)    
             {
                 CSMI_SAS_PHY_INFO csni_sas_phy_info = new CSMI_SAS_PHY_INFO();
-                bool res = getPhyPort(index, ref csni_sas_phy_info);
+                bool res = getPhyPort(index, ref csni_sas_phy_info);   // Get physical info of each scsi port (0 ~ MAX_SEARCH_SCSI_PORT)
+                
+                IntPtr intPtr_id = IntPtr.Zero;     //Pointer of ID info buffer
+                IntPtr intPtr_smart = IntPtr.Zero;  //Pointer of SMART info buffer
+                IntPtr intPtr_addr = IntPtr.Zero;   //Pointer of SASAddress from physical entity 
 
-                //////////////////////////////////////////////////////////////
-                IntPtr intPtr_id = IntPtr.Zero;
-                IntPtr intPtr_smart = IntPtr.Zero;
-                IntPtr intPtr_addr = IntPtr.Zero;
-
-                for (int i = 0; i < csni_sas_phy_info.bNumberOfPhys; i++)
+                for (int i = 0; i < csni_sas_phy_info.bNumberOfPhys; i++)   //Get ID/SMART buffer foreach physical entity under physical info
                 {
                     byte[] id = new byte[512];
                     GCHandle handle_id = GCHandle.Alloc(id, GCHandleType.Pinned);
@@ -138,7 +137,8 @@ namespace SMARTQuery
                     byte[] addr = Encoding.GetEncoding("UTF-8").GetBytes(csni_sas_phy_info.Phy[i].Attached.bSASAddress);
                     GCHandle handle_addr = GCHandle.Alloc(addr, GCHandleType.Pinned);
                     intPtr_addr = handle_addr.AddrOfPinnedObject();
-
+                    
+                    //Use physical entity contents to get ID/SMART buffer
                     res = getIdSmart(index, csni_sas_phy_info.Phy[i].Attached.bPhyIdentifier, csni_sas_phy_info.Phy[i].bPortIdentifier, intPtr_addr, intPtr_id, intPtr_smart);
 
                     if (res)
@@ -182,25 +182,25 @@ namespace SMARTQuery
         public List<RaidInfo> GetRaidDeviceList_NVMe()
         {
             //scan NVME raid device
+            const int MAX_SEARCH_SCSI_PORT = 16;
             List<RaidInfo> infoList = new List<RaidInfo>();
-            IntPtr intPtr_nvmeid = IntPtr.Zero;
-            IntPtr intPtr_nvmesmart = IntPtr.Zero;
-            IntPtr intPtr_port = IntPtr.Zero;
+            IntPtr intPtr_nvmeid = IntPtr.Zero;      //Pointer of ID info buffer
+            IntPtr intPtr_nvmesmart = IntPtr.Zero;   //Pointer of SMART info buffer
+            IntPtr intPtr_port = IntPtr.Zero;        //Pointer of physical info buffer
             byte[] port = new byte[16];
             int raid_type = -1;
             int raid_status = -1;
 
             GCHandle handle_port = GCHandle.Alloc(port, GCHandleType.Pinned);
             intPtr_port = handle_port.AddrOfPinnedObject();
-            for (int i = 0; i < 16; i++)
+            for (int i = 0; i < MAX_SEARCH_SCSI_PORT; i++)
             {
                 int scsiport = i;
-
-                bool res = getNvmePhyNPort(i, intPtr_port, ref raid_type, ref raid_status);
-                Marshal.Copy(port, 0, intPtr_port, port.Length);
+                bool res = getNvmePhyPort(i, intPtr_port, ref raid_type, ref raid_status);   //Get physical info buffer, raid type and raid status of each scsi port (0 ~ MAX_SEARCH_SCSI_PORT)
+                Marshal.Copy(port, 0, intPtr_port, port.Length);                            
                 if (res)
                 {
-                    for (int k = 0; k < 16; k++)
+                    for (int k = 0; k < 16; k++)   //Get ID/SMART buffer foreach physical entity under physical info
                     {
                         if (port[k] == 0)
                         {
@@ -216,7 +216,9 @@ namespace SMARTQuery
                         GCHandle smart_addr = GCHandle.Alloc(smart, GCHandleType.Pinned);
                         intPtr_nvmesmart = smart_addr.AddrOfPinnedObject();
                         ulong disksize = 0;
-                        bool isgetData = getNVMEIdSmart(scsiport, port[k], intPtr_nvmeid, intPtr_nvmesmart, ref disksize);
+                       
+                        //Use scsi port number and physical entity contents to get ID/SMART buffer and NVMe RAID disk size
+                        bool isgetData = getNVMEIdSmart(scsiport, port[k], intPtr_nvmeid, intPtr_nvmesmart, ref disksize);  
                         if (isgetData)
                         {
                             Marshal.Copy(id, 0, intPtr_nvmeid, id.Length);
